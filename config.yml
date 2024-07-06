@@ -1,0 +1,4 @@
+development:
+  database_url: "postgres://dima:dima@localhost:5432/testbarn"
+test:
+  database_url: "postgres://postgres:password@localhost:5432/testdb"
