@@ -3,9 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"testBarn/internal/db"
 
 	"github.com/gorilla/mux"
-	"testBarn/db"
 )
 
 func CreateTestCase(w http.ResponseWriter, r *http.Request) {
@@ -38,4 +38,27 @@ func GetTestCase(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(testCase)
+}
+
+func GetAllTestCases(w http.ResponseWriter, r *http.Request) {
+	testCases, err := db.GetAllTestCases()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(testCases)
+}
+
+func OpenTestCase() {
+	println("open test case")
+}
+
+func OpenTestRun() {
+	println("Open test run")
+}
+
+func CreateTestPlan() {
+	println("Create test Plan")
 }

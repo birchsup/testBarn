@@ -1,0 +1,30 @@
+version: '3'
+
+tasks:
+  all:
+    cmds:
+      - task: cli
+      - task: server
+
+  clean:
+    cmds:
+      - go clean
+      - rm -f bin/cli bin/server
+
+  cli:
+    cmds:
+      - go build -o bin/cli ./cmd/cli
+
+  server:
+    cmds:
+      - go build -o bin/server ./cmd/server
+
+  run-cli:
+    cmds:
+      - task: cli
+      - ./bin/cli
+
+  run-server:
+    cmds:
+      - task: server
+      - ./bin/server
