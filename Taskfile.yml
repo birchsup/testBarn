@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  test:
+    desc: "Run tests with verbose output"
+    cmds:
+      - go test -v tests_test/integrations/main_test.go

@@ -1,4 +1,4 @@
-package main_test
+package integrations_test
 
 import (
 	"bytes"
@@ -11,7 +11,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"testBarn/api"
+	"testBarn/db"
+	"testBarn/internal/api"
 	"testing"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"testBarn/db"
 )
 
 func startPostgresContainer() (testcontainers.Container, string, error) {
@@ -139,6 +139,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+type TestCase struct {
+	ID   int64           `json:"id"`
+	Test json.RawMessage `json:"test"`
+}
+
 func TestCreateAndGetTestCase(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
@@ -150,7 +155,9 @@ func TestCreateAndGetTestCase(t *testing.T) {
 	}
 
 	go func() {
-		log.Fatal(server.ListenAndServe())
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Could not listen on :8081: %v\n", err)
+		}
 	}()
 	defer server.Close()
 
@@ -172,21 +179,54 @@ func TestCreateAndGetTestCase(t *testing.T) {
 
 	testCaseBytes, _ := json.Marshal(testCase)
 	resp, err := http.Post("http://localhost:8081/testcases", "application/json", bytes.NewBuffer(testCaseBytes))
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Failed to create test case: %v", err)
+	}
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var createdTestCase db.TestCase
+	var createdTestCase TestCase
 	err = json.NewDecoder(resp.Body).Decode(&createdTestCase)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
 	assert.NotZero(t, createdTestCase.ID)
 
 	getResp, err := http.Get("http://localhost:8081/testcases/" + fmt.Sprint(createdTestCase.ID))
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Failed to get test case: %v", err)
+	}
 	assert.Equal(t, http.StatusOK, getResp.StatusCode)
 
-	var fetchedTestCase db.TestCase
+	var fetchedTestCase TestCase
 	err = json.NewDecoder(getResp.Body).Decode(&fetchedTestCase)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
 	assert.Equal(t, createdTestCase.ID, fetchedTestCase.ID)
-	assert.Equal(t, createdTestCase.Test, fetchedTestCase.Test)
+	assert.JSONEq(t, string(createdTestCase.Test), string(fetchedTestCase.Test))
+}
+
+// Test function to check if test_cases table was created
+func TestTableCreation(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	query := `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public'
+			AND table_name = 'test_cases'
+		);
+	`
+	var exists bool
+	err = db.QueryRow(query).Scan(&exists)
+	if err != nil {
+		t.Fatalf("Failed to check if table exists: %v", err)
+	}
+
+	assert.True(t, exists, "Table test_cases should exist after migrations")
 }

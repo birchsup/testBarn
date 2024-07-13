@@ -2,10 +2,9 @@ module testBarn
 
 go 1.21
 
-toolchain go1.22.5
-
 require (
 	github.com/golang-migrate/migrate/v4 v4.17.1
+	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/mux v1.8.1
 	github.com/jackc/pgx/v4 v4.18.2
 	github.com/spf13/viper v1.19.0

@@ -41,3 +41,27 @@ func GetTestCaseFromDB(id string) (TestCase, error) {
 	}
 	return testCase, nil
 }
+
+func GetAllTestCases() ([]TestCase, error) {
+	rows, err := DBPool.Query(context.Background(), "SELECT id, test FROM test_cases")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var testCases []TestCase
+	for rows.Next() {
+		var testCase TestCase
+		if err := rows.Scan(&testCase.ID, &testCase.Test); err != nil {
+			return nil, err
+		}
+		testCases = append(testCases, testCase)
+	}
+
+	// Check for any errors encountered during iteration
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return testCases, nil
+}
