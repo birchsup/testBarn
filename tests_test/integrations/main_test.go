@@ -11,8 +11,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"testBarn/db"
 	"testBarn/internal/api"
-	"testBarn/internal/db"
 	"testing"
 	"time"
 
@@ -204,4 +204,29 @@ func TestCreateAndGetTestCase(t *testing.T) {
 	}
 	assert.Equal(t, createdTestCase.ID, fetchedTestCase.ID)
 	assert.JSONEq(t, string(createdTestCase.Test), string(fetchedTestCase.Test))
+}
+
+// Test function to check if test_cases table was created
+func TestTableCreation(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := sql.Open("pgx", dbURL)
+	if err != nil {
+		t.Fatalf("Failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	query := `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables 
+			WHERE table_schema = 'public'
+			AND table_name = 'test_cases'
+		);
+	`
+	var exists bool
+	err = db.QueryRow(query).Scan(&exists)
+	if err != nil {
+		t.Fatalf("Failed to check if table exists: %v", err)
+	}
+
+	assert.True(t, exists, "Table test_cases should exist after migrations")
 }
