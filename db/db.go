@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v4/pgxpool"
 )
@@ -22,6 +23,13 @@ func InitDB() {
 type TestCase struct {
 	ID   int64           `json:"id"`
 	Test json.RawMessage `json:"test"`
+}
+
+type TestRun struct {
+	ID         int             `json:"id"`
+	SuiteID    int             `json:"suite_id"`
+	RunDetails json.RawMessage `json:"run_details"`
+	CreatedAt  time.Time       `json:"created_at"`
 }
 
 func CreateTestCaseInDB(testCase TestCase) (int64, error) {
