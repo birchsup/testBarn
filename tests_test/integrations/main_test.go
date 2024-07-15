@@ -207,7 +207,7 @@ func TestCreateAndGetTestCase(t *testing.T) {
 }
 
 // Test function to check if test_cases table was created
-func TestTableCreation(t *testing.T) {
+func TestTableTestCases(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	db, err := sql.Open("pgx", dbURL)
 	if err != nil {
@@ -215,18 +215,28 @@ func TestTableCreation(t *testing.T) {
 	}
 	defer db.Close()
 
-	query := `
-		SELECT EXISTS (
-			SELECT FROM information_schema.tables 
-			WHERE table_schema = 'public'
-			AND table_name = 'test_cases'
-		);
-	`
-	var exists bool
-	err = db.QueryRow(query).Scan(&exists)
-	if err != nil {
-		t.Fatalf("Failed to check if table exists: %v", err)
+	tables := []string{
+		"test_cases",
+		"test_suites",
+		"test_suite_cases",
+		"test_runs",
+		"test_run_cases",
 	}
 
-	assert.True(t, exists, "Table test_cases should exist after migrations")
+	for _, table := range tables {
+		query := `
+			SELECT EXISTS (
+				SELECT FROM information_schema.tables 
+				WHERE table_schema = 'public'
+				AND table_name = $1
+			);
+		`
+		var exists bool
+		err := db.QueryRow(query, table).Scan(&exists)
+		if err != nil {
+			t.Fatalf("Failed to check if table %s exists: %v", table, err)
+		}
+
+		assert.True(t, exists, "Table %s should exist after migrations", table)
+	}
 }
