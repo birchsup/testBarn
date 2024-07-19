@@ -22,6 +22,7 @@ func CreateTestCase(w http.ResponseWriter, r *http.Request) {
 
 	testCase.ID = id
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ngrok-skip-browser-warning", "true")
 	json.NewEncoder(w).Encode(testCase)
 }
 
@@ -36,6 +37,7 @@ func GetTestCase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ngrok-skip-browser-warning", "true")
 	json.NewEncoder(w).Encode(testCase)
 }
 
@@ -47,5 +49,6 @@ func GetAllTestCases(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ngrok-skip-browser-warning", "true")
 	json.NewEncoder(w).Encode(testCases)
 }
