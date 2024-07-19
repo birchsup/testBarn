@@ -16,10 +16,17 @@ func main() {
 	defer db.DBPool.Close()
 
 	r := mux.NewRouter()
+	//testCases
 	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
 	r.HandleFunc("/testcases/{id:[0-9]+}", api.GetTestCase).Methods("GET")
 	r.HandleFunc("/testcases", api.GetAllTestCases).Methods("GET")
-	r.HandleFunc("/testrun", api.CreateTestRunHandler).Methods("POST")
+	r.HandleFunc("/test-case/update", api.UpdateTestCaseHandler).Methods("PUT")
+	r.HandleFunc("/test-case/delete", api.DeleteTestCaseHandler).Methods("DELETE")
+
+	//test Runs
+	//r.HandleFunc("/testrun", api.CreateTestRunHandler).Methods("POST")
+
+	//test suites
 	r.HandleFunc("/test-suites", api.CreateTestSuiteHandler).Methods("POST")
 	r.HandleFunc("/test-suites/add-cases", api.AddTestCasesToSuiteHandler).Methods("POST")
 	r.HandleFunc("/test-suite", api.GetTestSuiteByIDHandler).Methods("GET")
@@ -27,7 +34,7 @@ func main() {
 	r.HandleFunc("/test-suite/delete", api.DeleteTestSuiteHandler).Methods("DELETE")
 	r.HandleFunc("/test-suite/remove-case", api.RemoveTestCaseFromSuiteHandler).Methods("DELETE")
 
-	// Настройка CORS
+	// CORS
 	corsHandler := handlers.CORS(
 		handlers.AllowedOrigins([]string{"*"}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
