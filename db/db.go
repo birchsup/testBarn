@@ -3,11 +3,9 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"log"
 	"os"
-	"time"
-
-	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 var DBPool *pgxpool.Pool
@@ -23,13 +21,6 @@ func InitDB() {
 type TestCase struct {
 	ID   int64           `json:"id"`
 	Test json.RawMessage `json:"test"`
-}
-
-type TestRun struct {
-	ID         int             `json:"id"`
-	SuiteID    int             `json:"suite_id"`
-	RunDetails json.RawMessage `json:"run_details"`
-	CreatedAt  time.Time       `json:"created_at"`
 }
 
 func CreateTestCaseInDB(testCase TestCase) (int64, error) {
@@ -74,28 +65,18 @@ func GetAllTestCases() ([]TestCase, error) {
 	return testCases, nil
 }
 
-func CreateTestRun(suiteID int, runDetails json.RawMessage) ([]TestRun, error) {
-	query := `INSERT INTO test_runs (suite_id, run_details) VALUES ($1, $2) RETURNING id, suite_id, run_details, created_at`
+func UpdateTestCaseInDB(id int64, updatedTest json.RawMessage) error {
+	_, err := DBPool.Exec(context.Background(), "UPDATE test_cases SET test=$1 WHERE id=$2", updatedTest, id)
+	return err
+}
 
-	rows, err := DBPool.Query(context.Background(), query, suiteID, runDetails)
+func DeleteTestCaseInDB(id int64) error {
+	// delete test from  test_suite_cases
+	_, err := DBPool.Exec(context.Background(), "DELETE FROM test_suite_cases WHERE case_id=$1", id)
 	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var testRuns []TestRun
-
-	for rows.Next() {
-		var testRun TestRun
-		if err := rows.Scan(&testRun.ID, &testRun.SuiteID, &testRun.RunDetails, &testRun.CreatedAt); err != nil {
-			return nil, err
-		}
-		testRuns = append(testRuns, testRun)
+		return err
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return testRuns, nil
+	_, err = DBPool.Exec(context.Background(), "DELETE FROM test_cases WHERE id=$1", id)
+	return err
 }
