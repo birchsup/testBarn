@@ -22,12 +22,17 @@ func main() {
 	r.HandleFunc("/testrun", api.CreateTestRunHandler).Methods("POST")
 	r.HandleFunc("/test-suites", api.CreateTestSuiteHandler).Methods("POST")
 	r.HandleFunc("/test-suites/add-cases", api.AddTestCasesToSuiteHandler).Methods("POST")
+	r.HandleFunc("/test-suite", api.GetTestSuiteByIDHandler).Methods("GET")
+	r.HandleFunc("/test-suite/update", api.UpdateTestSuiteHandler).Methods("PUT")
+	r.HandleFunc("/test-suite/delete", api.DeleteTestSuiteHandler).Methods("DELETE")
+	r.HandleFunc("/test-suite/remove-case", api.RemoveTestCaseFromSuiteHandler).Methods("DELETE")
 
 	// Настройка CORS
 	corsHandler := handlers.CORS(
 		handlers.AllowedOrigins([]string{"*"}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
 		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+		handlers.AllowedHeaders([]string{"ngrok-skip-browser-warning", "true"}),
 	)(r)
 
 	log.Println("Server is running on port 8080")
