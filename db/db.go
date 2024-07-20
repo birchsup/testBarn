@@ -19,8 +19,10 @@ func InitDB() {
 }
 
 type TestCase struct {
-	ID   int64           `json:"id"`
-	Test json.RawMessage `json:"test"`
+	ID        int64           `json:"id"`
+	Test      json.RawMessage `json:"test"`
+	SuiteID   int64           `json:"suite_id"`
+	SuiteName string          `json:"suite_name"`
 }
 
 func CreateTestCaseInDB(testCase TestCase) (int64, error) {
@@ -34,7 +36,13 @@ func CreateTestCaseInDB(testCase TestCase) (int64, error) {
 
 func GetTestCaseFromDB(id string) (TestCase, error) {
 	var testCase TestCase
-	err := DBPool.QueryRow(context.Background(), "SELECT id, test FROM test_cases WHERE id=$1", id).Scan(&testCase.ID, &testCase.Test)
+	query := `
+		SELECT tc.id, tc.test, tsc.suite_id, ts.name
+		FROM test_cases tc
+		LEFT JOIN test_suite_cases tsc ON tc.id = tsc.case_id
+		LEFT JOIN test_suites ts ON tsc.suite_id = ts.id
+		WHERE tc.id=$1`
+	err := DBPool.QueryRow(context.Background(), query, id).Scan(&testCase.ID, &testCase.Test, &testCase.SuiteID, &testCase.SuiteName)
 	if err != nil {
 		return testCase, err
 	}
