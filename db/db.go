@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"log"
@@ -21,8 +22,8 @@ func InitDB() {
 type TestCase struct {
 	ID        int64           `json:"id"`
 	Test      json.RawMessage `json:"test"`
-	SuiteID   int64           `json:"suite_id"`
-	SuiteName string          `json:"suite_name"`
+	SuiteID   sql.NullInt64   `json:"suite_id"`
+	SuiteName sql.NullString  `json:"suite_name"`
 }
 
 func CreateTestCaseInDB(testCase TestCase) (int64, error) {
