@@ -85,7 +85,12 @@ func UpdateTestCaseHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(map[string]string{"message": "success"})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
 }
 func DeleteTestCaseHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
