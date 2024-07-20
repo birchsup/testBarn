@@ -36,6 +36,13 @@ func CreateTestSuite(name string, description string) (TestSuite, error) {
 }
 
 func AddTestCasesToSuite(suiteID int, caseIDs []int) error {
+	// delete connection
+	_, err := DBPool.Exec(context.Background(), `DELETE FROM test_suite_cases WHERE case_id = ANY($1::int[])`, caseIDs)
+	if err != nil {
+		return err
+	}
+
+	// add new connection
 	for _, caseID := range caseIDs {
 		_, err := DBPool.Exec(context.Background(), `INSERT INTO test_suite_cases (suite_id, case_id) VALUES ($1, $2)`, suiteID, caseID)
 		if err != nil {
@@ -125,4 +132,28 @@ func RemoveTestCaseFromSuite(suiteID int, caseID int) error {
 		return err
 	}
 	return nil
+}
+
+func GetAllTestSuites() ([]TestSuite, error) {
+	query := `SELECT id, name, description, created_at FROM test_suites`
+	rows, err := DBPool.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var testSuites []TestSuite
+	for rows.Next() {
+		var testSuite TestSuite
+		err := rows.Scan(&testSuite.ID, &testSuite.Name, &testSuite.Description, &testSuite.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		testSuites = append(testSuites, testSuite)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return testSuites, nil
 }

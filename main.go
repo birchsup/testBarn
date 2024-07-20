@@ -27,6 +27,7 @@ func main() {
 	//r.HandleFunc("/testrun", api.CreateTestRunHandler).Methods("POST")
 
 	//test suites
+	r.HandleFunc("/test-suites", api.GetAllTestSuitesHandler).Methods("GET")
 	r.HandleFunc("/test-suites", api.CreateTestSuiteHandler).Methods("POST")
 	r.HandleFunc("/test-suites/add-cases", api.AddTestCasesToSuiteHandler).Methods("POST")
 	r.HandleFunc("/test-suite", api.GetTestSuiteByIDHandler).Methods("GET")
