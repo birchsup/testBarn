@@ -18,7 +18,7 @@ func main() {
 	r := mux.NewRouter()
 	//testCases
 	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
-	r.HandleFunc("/testcases/{id:[0-9]+}", api.GetTestCase).Methods("GET")
+	r.HandleFunc("/testcase", api.GetTestCaseHandler).Methods("GET")
 	r.HandleFunc("/testcases", api.GetAllTestCases).Methods("GET")
 	r.HandleFunc("/test-case/update", api.UpdateTestCaseHandler).Methods("PUT")
 	r.HandleFunc("/test-case/delete", api.DeleteTestCaseHandler).Methods("DELETE")

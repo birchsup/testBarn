@@ -1,8 +1,8 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
-	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
 	"testBarn/db"
@@ -27,13 +27,20 @@ func CreateTestCase(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(testCase)
 }
 
-func GetTestCase(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id := vars["id"]
+func GetTestCaseHandler(w http.ResponseWriter, r *http.Request) {
+	testCaseID := r.URL.Query().Get("id")
+	if testCaseID == "" {
+		http.Error(w, "Missing testCaseID", http.StatusBadRequest)
+		return
+	}
 
-	testCase, err := db.GetTestCaseFromDB(id)
+	testCase, err := db.GetTestCaseFromDB(testCaseID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Test case not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -85,7 +92,7 @@ func UpdateTestCaseHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 }
 func DeleteTestCaseHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
