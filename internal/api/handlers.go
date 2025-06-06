@@ -10,7 +10,8 @@ import (
 
 func CreateTestCase(w http.ResponseWriter, r *http.Request) {
 	var testCase db.TestCase
-	if err := json.NewDecoder(r.Body).Decode(&testCase); err != nil {
+	err := json.NewDecoder(r.Body).Decode(&testCase)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -24,7 +25,10 @@ func CreateTestCase(w http.ResponseWriter, r *http.Request) {
 	testCase.ID = id
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("ngrok-skip-browser-warning", "true")
-	json.NewEncoder(w).Encode(testCase)
+	err = json.NewEncoder(w).Encode(testCase)
+	if err != nil {
+		return
+	}
 }
 
 func GetTestCaseHandler(w http.ResponseWriter, r *http.Request) {

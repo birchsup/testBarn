@@ -97,7 +97,7 @@ func logTables(dbURL string) {
 	}
 	defer db.Close()
 
-	rows, err := db.Query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+	rows, err := db.Query("SELECT table_name FROM tables WHERE table_schema='public'")
 	if err != nil {
 		log.Fatalf("Failed to query tables: %v", err)
 	}

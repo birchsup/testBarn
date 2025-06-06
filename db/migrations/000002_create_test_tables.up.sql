@@ -20,9 +20,12 @@ CREATE TABLE test_runs (
 );
 
 CREATE TABLE test_run_cases (
-                                run_id INTEGER REFERENCES test_runs(id),
-                                case_id INTEGER REFERENCES test_cases(id),
+                                run_id INTEGER REFERENCES test_runs(id) ON DELETE CASCADE,
+                                case_id INTEGER REFERENCES test_cases(id) ON DELETE CASCADE,
+                                status VARCHAR(50) DEFAULT 'new',
+                                comment TEXT,
                                 PRIMARY KEY (run_id, case_id)
 );
+
 
 
