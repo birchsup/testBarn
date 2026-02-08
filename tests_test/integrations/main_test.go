@@ -222,6 +222,33 @@ type TestCase struct {
 	Test json.RawMessage `json:"test"`
 }
 
+type TestSuiteResponse struct {
+	ID int `json:"id"`
+}
+
+type TestRunCaseResponse struct {
+	CaseID     int64      `json:"case_id"`
+	Status     string     `json:"status"`
+	Comment    *string    `json:"comment,omitempty"`
+	ExecutedAt *time.Time `json:"executed_at,omitempty"`
+}
+
+type TestRunSummaryResponse struct {
+	Passed  int `json:"passed"`
+	Failed  int `json:"failed"`
+	Blocked int `json:"blocked"`
+	Skipped int `json:"skipped"`
+	NotRun  int `json:"not_run"`
+}
+
+type TestRunResponse struct {
+	ID        int                    `json:"id"`
+	SuiteID   *int                   `json:"suite_id,omitempty"`
+	Cases     []TestRunCaseResponse  `json:"cases,omitempty"`
+	Summary   TestRunSummaryResponse `json:"summary"`
+	CreatedAt time.Time              `json:"created_at"`
+}
+
 func TestCreateAndGetTestCase(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
@@ -329,6 +356,225 @@ func TestGetTestCaseContractErrors(t *testing.T) {
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+func TestCreateListGetAndPatchTestRuns(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
+	r.HandleFunc("/test-suites", api.CreateTestSuiteHandler).Methods("POST")
+	r.HandleFunc("/test-suites/add-cases", api.AddTestCasesToSuiteHandler).Methods("POST")
+	r.HandleFunc("/test-runs", api.CreateTestRunHandler).Methods("POST")
+	r.HandleFunc("/test-runs", api.GetAllTestRunsHandler).Methods("GET")
+	r.HandleFunc("/test-runs/{id}", api.GetTestRunByIDHandler).Methods("GET")
+	r.HandleFunc("/test-runs/{runId}/cases/{caseId}", api.UpdateTestRunCaseStatusHandler).Methods("PATCH")
+
+	server := httptest.NewServer(r)
+	defer server.Close()
+
+	createCase := func(name string) int64 {
+		payload := map[string]interface{}{
+			"test": map[string]interface{}{
+				"name": name,
+			},
+		}
+		body, _ := json.Marshal(payload)
+		resp, err := http.Post(server.URL+"/testcases", "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			t.Fatalf("Failed to create test case: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var created TestCase
+		if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+			t.Fatalf("Failed to decode created test case: %v", err)
+		}
+		return created.ID
+	}
+
+	caseFromSuite := createCase("Case from suite")
+	caseExtra := createCase("Case extra")
+
+	createSuiteBody, _ := json.Marshal(map[string]string{
+		"name":        "Run source suite",
+		"description": "Suite for test-runs integration test",
+	})
+	suiteResp, err := http.Post(server.URL+"/test-suites", "application/json", bytes.NewBuffer(createSuiteBody))
+	if err != nil {
+		t.Fatalf("Failed to create suite: %v", err)
+	}
+	defer func() { _ = suiteResp.Body.Close() }()
+	assert.Equal(t, http.StatusCreated, suiteResp.StatusCode)
+
+	var createdSuite TestSuiteResponse
+	if err := json.NewDecoder(suiteResp.Body).Decode(&createdSuite); err != nil {
+		t.Fatalf("Failed to decode suite: %v", err)
+	}
+
+	addCasesBody, _ := json.Marshal(map[string]interface{}{
+		"suite_id": createdSuite.ID,
+		"case_ids": []int64{caseFromSuite},
+	})
+	addReq, _ := http.NewRequest(http.MethodPost, server.URL+"/test-suites/add-cases", bytes.NewBuffer(addCasesBody))
+	addReq.Header.Set("Content-Type", "application/json")
+	addResp, err := http.DefaultClient.Do(addReq)
+	if err != nil {
+		t.Fatalf("Failed to add cases to suite: %v", err)
+	}
+	defer func() { _ = addResp.Body.Close() }()
+	assert.Equal(t, http.StatusOK, addResp.StatusCode)
+
+	createRunBody, _ := json.Marshal(map[string]interface{}{
+		"suite_id":      createdSuite.ID,
+		"test_case_ids": []int64{caseFromSuite, caseExtra, caseExtra},
+		"run_details": map[string]interface{}{
+			"name": "Regression run",
+		},
+		"executed_by": "qa.bot",
+	})
+	createRunResp, err := http.Post(server.URL+"/test-runs", "application/json", bytes.NewBuffer(createRunBody))
+	if err != nil {
+		t.Fatalf("Failed to create test run: %v", err)
+	}
+	defer func() { _ = createRunResp.Body.Close() }()
+	assert.Equal(t, http.StatusCreated, createRunResp.StatusCode)
+
+	var createdRun TestRunResponse
+	if err := json.NewDecoder(createRunResp.Body).Decode(&createdRun); err != nil {
+		t.Fatalf("Failed to decode created run: %v", err)
+	}
+	assert.NotZero(t, createdRun.ID)
+	assert.Len(t, createdRun.Cases, 2, "suite + explicit case IDs should be deduplicated")
+	assert.Equal(t, 2, createdRun.Summary.NotRun)
+
+	listRunsResp, err := http.Get(server.URL + "/test-runs")
+	if err != nil {
+		t.Fatalf("Failed to list test runs: %v", err)
+	}
+	defer func() { _ = listRunsResp.Body.Close() }()
+	assert.Equal(t, http.StatusOK, listRunsResp.StatusCode)
+
+	var runs []TestRunResponse
+	if err := json.NewDecoder(listRunsResp.Body).Decode(&runs); err != nil {
+		t.Fatalf("Failed to decode runs list: %v", err)
+	}
+	assert.NotEmpty(t, runs)
+
+	getRunResp, err := http.Get(fmt.Sprintf("%s/test-runs/%d", server.URL, createdRun.ID))
+	if err != nil {
+		t.Fatalf("Failed to get run by id: %v", err)
+	}
+	defer func() { _ = getRunResp.Body.Close() }()
+	assert.Equal(t, http.StatusOK, getRunResp.StatusCode)
+
+	var fetchedRun TestRunResponse
+	if err := json.NewDecoder(getRunResp.Body).Decode(&fetchedRun); err != nil {
+		t.Fatalf("Failed to decode fetched run: %v", err)
+	}
+	assert.Len(t, fetchedRun.Cases, 2)
+	assert.Equal(t, 2, fetchedRun.Summary.NotRun)
+
+	targetCaseID := fetchedRun.Cases[0].CaseID
+	patchBody, _ := json.Marshal(map[string]interface{}{
+		"status":      "passed",
+		"comment":     "Executed successfully",
+		"executed_by": "qa.user",
+	})
+	patchReq, _ := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s/test-runs/%d/cases/%d", server.URL, createdRun.ID, targetCaseID), bytes.NewBuffer(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	patchResp, err := http.DefaultClient.Do(patchReq)
+	if err != nil {
+		t.Fatalf("Failed to patch run case status: %v", err)
+	}
+	defer func() { _ = patchResp.Body.Close() }()
+	assert.Equal(t, http.StatusOK, patchResp.StatusCode)
+
+	var patchedRun TestRunResponse
+	if err := json.NewDecoder(patchResp.Body).Decode(&patchedRun); err != nil {
+		t.Fatalf("Failed to decode patched run response: %v", err)
+	}
+	assert.Equal(t, 1, patchedRun.Summary.Passed)
+	assert.Equal(t, 1, patchedRun.Summary.NotRun)
+}
+
+func TestTestRunContractErrors(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/test-runs", api.CreateTestRunHandler).Methods("POST")
+	r.HandleFunc("/test-runs/{id}", api.GetTestRunByIDHandler).Methods("GET")
+	r.HandleFunc("/test-runs/{runId}/cases/{caseId}", api.UpdateTestRunCaseStatusHandler).Methods("PATCH")
+
+	server := httptest.NewServer(r)
+	defer server.Close()
+
+	t.Run("create run requires source", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"run_details": map[string]interface{}{"name": "bad run"},
+		})
+		resp, err := http.Post(server.URL+"/test-runs", "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			t.Fatalf("Failed to create request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("create run with invalid case id", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"test_case_ids": []int{99999999},
+		})
+		resp, err := http.Post(server.URL+"/test-runs", "application/json", bytes.NewBuffer(body))
+		if err != nil {
+			t.Fatalf("Failed to create request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("get run with invalid id", func(t *testing.T) {
+		resp, err := http.Get(server.URL + "/test-runs/not-a-number")
+		if err != nil {
+			t.Fatalf("Failed to get run: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("get non-existing run", func(t *testing.T) {
+		resp, err := http.Get(server.URL + "/test-runs/9999999")
+		if err != nil {
+			t.Fatalf("Failed to get run: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("patch with invalid status", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"status": "unknown",
+		})
+		req, _ := http.NewRequest(http.MethodPatch, server.URL+"/test-runs/1/cases/1", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to patch run case: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("patch non-existing run", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"status": "passed",
+		})
+		req, _ := http.NewRequest(http.MethodPatch, server.URL+"/test-runs/9999999/cases/1", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("Failed to patch run case: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
 
