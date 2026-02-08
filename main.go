@@ -24,9 +24,10 @@ func main() {
 	r.HandleFunc("/test-case/delete", api.DeleteTestCaseHandler).Methods("DELETE")
 
 	//test Runs
-	// Feature flag decision: test run API is intentionally not part of the public contract yet.
-	// Keep DB schema in place, but do not register routes until handlers and validation are complete.
-	//r.HandleFunc("/testrun", api.CreateTestRunHandler).Methods("POST")
+	r.HandleFunc("/test-runs", api.CreateTestRunHandler).Methods("POST")
+	r.HandleFunc("/test-runs", api.GetAllTestRunsHandler).Methods("GET")
+	r.HandleFunc("/test-runs/{id}", api.GetTestRunByIDHandler).Methods("GET")
+	r.HandleFunc("/test-runs/{runId}/cases/{caseId}", api.UpdateTestRunCaseStatusHandler).Methods("PATCH")
 
 	//test suites
 	r.HandleFunc("/test-suites", api.GetAllTestSuitesHandler).Methods("GET")
