@@ -18,12 +18,14 @@ func main() {
 	r := mux.NewRouter()
 	//testCases
 	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
-	r.HandleFunc("/testcase", api.GetTestCaseHandler).Methods("GET")
+	r.HandleFunc("/testcases/{id}", api.GetTestCaseHandler).Methods("GET")
 	r.HandleFunc("/testcases", api.GetAllTestCases).Methods("GET")
 	r.HandleFunc("/test-case/update", api.UpdateTestCaseHandler).Methods("PUT")
 	r.HandleFunc("/test-case/delete", api.DeleteTestCaseHandler).Methods("DELETE")
 
 	//test Runs
+	// Feature flag decision: test run API is intentionally not part of the public contract yet.
+	// Keep DB schema in place, but do not register routes until handlers and validation are complete.
 	//r.HandleFunc("/testrun", api.CreateTestRunHandler).Methods("POST")
 
 	//test suites
@@ -39,8 +41,8 @@ func main() {
 	corsHandler := handlers.CORS(
 		handlers.AllowedOrigins([]string{"*"}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
-		handlers.AllowedHeaders([]string{"ngrok-skip-browser-warning", "true"}),
+		// AllowedHeaders appends values. Keep a single explicit list to avoid accidental invalid header names.
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization", "Ngrok-Skip-Browser-Warning"}),
 	)(r)
 
 	log.Println("Server is running on port 8080")

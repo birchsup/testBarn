@@ -12,28 +12,5 @@ type TestRun struct {
 	CreatedAt  time.Time       `json:"created_at"`
 }
 
-//func CreateTestRun(suiteID int, runDetails json.RawMessage) ([]TestRun, error) {
-//	query := `INSERT INTO test_runs (suite_id, run_details) VALUES ($1, $2) RETURNING id, suite_id, run_details, created_at`
-//
-//	rows, err := DBPool.Query(context.Background(), query, suiteID, runDetails)
-//	if err != nil {
-//		return nil, err
-//	}
-//	defer rows.Close()
-//
-//	var testRuns []TestRun
-//
-//	for rows.Next() {
-//		var testRun TestRun
-//		if err := rows.Scan(&testRun.ID, &testRun.SuiteID, &testRun.RunDetails, &testRun.CreatedAt); err != nil {
-//			return nil, err
-//		}
-//		testRuns = append(testRuns, testRun)
-//	}
-//
-//	if err := rows.Err(); err != nil {
-//		return nil, err
-//	}
-//
-//	return testRuns, nil
-//}
+// TestRun and related DB schema are kept for a deferred test_runs feature.
+// Decision (2026-02-08): tables remain migrated, but write/read API is intentionally disabled.

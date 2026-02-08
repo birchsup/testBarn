@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -190,7 +191,7 @@ type TestCase struct {
 func TestCreateAndGetTestCase(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
-	r.HandleFunc("/testcase", api.GetTestCaseHandler).Methods("GET")
+	r.HandleFunc("/testcases/{id}", api.GetTestCaseHandler).Methods("GET")
 
 	server := &http.Server{
 		Addr:    ":8081",
@@ -239,7 +240,7 @@ func TestCreateAndGetTestCase(t *testing.T) {
 	}
 	assert.NotZero(t, createdTestCase.ID)
 
-	getResp, err := http.Get("http://localhost:8081/testcase?id=" + fmt.Sprint(createdTestCase.ID))
+	getResp, err := http.Get("http://localhost:8081/testcases/" + fmt.Sprint(createdTestCase.ID))
 	if err != nil {
 		t.Fatalf("Failed to get test case: %v", err)
 	}
@@ -255,6 +256,32 @@ func TestCreateAndGetTestCase(t *testing.T) {
 	}
 	assert.Equal(t, createdTestCase.ID, fetchedTestCase.ID)
 	assert.JSONEq(t, string(createdTestCase.Test), string(fetchedTestCase.Test))
+}
+
+func TestGetTestCaseContractErrors(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/testcases/{id}", api.GetTestCaseHandler).Methods("GET")
+
+	t.Run("invalid id format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases/not-a-number", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("missing id in path", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("non-existing id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases/99999999", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
 }
 
 // Test function to check if test_cases table was created
