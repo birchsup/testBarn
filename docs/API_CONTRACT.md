@@ -426,3 +426,75 @@
 1. Полный запуск домена `test_runs` (CRUD + бизнес-семантика run-cases).
 2. Рефакторинг CORS и инфраструктурный hardening (после фикса основного контракта).
 3. Введение версионирования API (`/api/v1`) и возможной обратной совместимости со старыми маршрутами.
+
+## 5) Update: MVP Test Runs (Suite-based)
+
+Ниже зафиксированы новые активные методы для MVP test runs, включая создание run из `test suite`.
+
+### 5.1 Active endpoints (MVP test runs)
+
+| Method | Path | Назначение |
+|---|---|---|
+| POST | `/test-runs` | Создать test run из `suite_id`, списка `test_case_ids` или их комбинации |
+| GET | `/test-runs` | Получить список test runs |
+| GET | `/test-runs/{id}` | Получить детали test run (включая cases и summary) |
+| PATCH | `/test-runs/{runId}/cases/{caseId}` | Обновить статус/комментарий конкретного case в run |
+
+### 5.2 POST `/test-runs`
+- Назначение: создать новый run.
+- Поддерживаемые источники кейсов:
+  - `suite_id` (все кейсы из указанного test suite),
+  - `test_case_ids` (явно переданный список),
+  - комбинация `suite_id + test_case_ids`.
+- Request body:
+```json
+{
+  "suite_id": 10,
+  "test_case_ids": [1, 2, 3],
+  "run_details": {"name": "Regression run"},
+  "executed_by": "qa.user"
+}
+```
+- Правила:
+  - должен быть указан хотя бы один источник (`suite_id` или `test_case_ids`);
+  - если `suite_id` не существует -> `404`;
+  - если хотя бы один `test_case_id` не существует -> `404`;
+  - повторяющиеся `test_case_ids` дедуплицируются;
+  - материализация run-case записей выполняется в `test_run_cases` со статусом `not_run`.
+- Response:
+  - Success: `201 Created`, возвращается run details (`id`, `suite_id`, `cases`, `summary`, `created_at`);
+  - Errors:
+    - `400 Bad Request` — невалидный payload/ID или отсутствует источник;
+    - `404 Not Found` — `suite`/`case` не найден.
+
+### 5.3 GET `/test-runs`
+- Назначение: получить список run-ов.
+- Response:
+  - Success: `200 OK`, JSON-массив run-объектов.
+
+### 5.4 GET `/test-runs/{id}`
+- Назначение: получить один run с кейсами и итоговой сводкой.
+- Response:
+  - Success: `200 OK`, объект run:
+    - `cases[]` с `case_id`, `status`, `comment`, `executed_at`, `executed_by`;
+    - `summary` с полями `passed`, `failed`, `blocked`, `skipped`, `not_run`.
+  - Errors:
+    - `400 Bad Request` — невалидный `id`;
+    - `404 Not Found` — run не найден.
+
+### 5.5 PATCH `/test-runs/{runId}/cases/{caseId}`
+- Назначение: обновить статус и комментарий кейса в run.
+- Request body:
+```json
+{
+  "status": "passed",
+  "comment": "Executed successfully",
+  "executed_by": "qa.user"
+}
+```
+- Разрешённые статусы: `passed`, `failed`, `blocked`, `skipped`, `not_run`.
+- Response:
+  - Success: `200 OK`, возвращается обновлённый run details с пересчитанной `summary`;
+  - Errors:
+    - `400 Bad Request` — невалидные `runId/caseId` или `status`;
+    - `404 Not Found` — run или run-case не найден.
