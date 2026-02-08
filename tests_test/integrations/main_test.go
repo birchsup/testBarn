@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testBarn/db"
 	"testBarn/internal/api"
 	"testing"
@@ -129,18 +130,51 @@ func logTables(dbURL string) {
 }
 
 func migrationsPath() (string, error) {
+	// Portable resolution order:
+	// 1) TEST_MIGRATIONS_PATH env (absolute/relative path)
+	// 2) discover project root from current working directory
+	// 3) discover project root from this test file location
+	if fromEnv := strings.TrimSpace(os.Getenv("TEST_MIGRATIONS_PATH")); fromEnv != "" {
+		absPath, err := filepath.Abs(fromEnv)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve TEST_MIGRATIONS_PATH=%q: %w", fromEnv, err)
+		}
+		if stat, err := os.Stat(absPath); err != nil || !stat.IsDir() {
+			return "", fmt.Errorf("TEST_MIGRATIONS_PATH does not point to an existing directory: %s", absPath)
+		}
+		return "file://" + filepath.ToSlash(absPath), nil
+	}
+
+	if wd, err := os.Getwd(); err == nil {
+		if root, ok := findProjectRoot(wd); ok {
+			return "file://" + filepath.ToSlash(filepath.Join(root, "db", "migrations")), nil
+		}
+	}
+
 	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("failed to resolve caller info")
+	if ok {
+		if root, ok := findProjectRoot(filepath.Dir(filename)); ok {
+			return "file://" + filepath.ToSlash(filepath.Join(root, "db", "migrations")), nil
+		}
 	}
 
-	projectRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "../.."))
-	absPath, err := filepath.Abs(filepath.Join(projectRoot, "db", "migrations"))
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve migrations path: %w", err)
-	}
+	return "", fmt.Errorf("failed to locate db/migrations; set TEST_MIGRATIONS_PATH explicitly")
+}
 
-	return "file://" + filepath.ToSlash(absPath), nil
+func findProjectRoot(start string) (string, bool) {
+	curr := filepath.Clean(start)
+	for {
+		migrationsDir := filepath.Join(curr, "db", "migrations")
+		if stat, err := os.Stat(migrationsDir); err == nil && stat.IsDir() {
+			return curr, true
+		}
+
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			return "", false
+		}
+		curr = parent
+	}
 }
 
 func TestMain(m *testing.M) {
@@ -281,6 +315,20 @@ func TestGetTestCaseContractErrors(t *testing.T) {
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("zero id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases/0", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("negative id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases/-10", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 }
 
