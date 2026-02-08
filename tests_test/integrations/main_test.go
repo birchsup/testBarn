@@ -6,11 +6,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
-	"github.com/stretchr/testify/assert"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testBarn/db"
 	"testBarn/internal/api"
 	"testing"
@@ -18,7 +19,9 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/gorilla/mux"
 	_ "github.com/jackc/pgx/v4/stdlib"
+	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -59,20 +62,25 @@ func startPostgresContainer() (testcontainers.Container, string, error) {
 }
 
 func runMigrations(dbURL string) error {
-	db, err := sql.Open("pgx", dbURL)
+	conn, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
-	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	driver, err := postgres.WithInstance(conn, &postgres.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create postgres driver: %w", err)
 	}
 
-	migrationsPath := fmt.Sprintf("file:///Users/dmitrijsadovnikov/testBarn/db/migrations")
+	migrationsPath, err := migrationsPath()
+	if err != nil {
+		return err
+	}
 
-	println("running migrations from", migrationsPath)
+	log.Println("running migrations from", migrationsPath)
 	m, err := migrate.NewWithDatabaseInstance(
 		migrationsPath,
 		"postgres", driver)
@@ -91,17 +99,21 @@ func runMigrations(dbURL string) error {
 }
 
 func logTables(dbURL string) {
-	db, err := sql.Open("pgx", dbURL)
+	conn, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
-	rows, err := db.Query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+	rows, err := conn.Query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
 	if err != nil {
 		log.Fatalf("Failed to query tables: %v", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	log.Println("Tables in the database:")
 	for rows.Next() {
@@ -116,14 +128,45 @@ func logTables(dbURL string) {
 	}
 }
 
-func TestMain(m *testing.M) {
-	postgresC, dbURL, err := startPostgresContainer()
-	if err != nil {
-		log.Fatalf("Failed to start container: %v", err)
+func migrationsPath() (string, error) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("failed to resolve caller info")
 	}
-	defer postgresC.Terminate(context.Background())
 
-	os.Setenv("DATABASE_URL", dbURL)
+	projectRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "../.."))
+	absPath, err := filepath.Abs(filepath.Join(projectRoot, "db", "migrations"))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve migrations path: %w", err)
+	}
+
+	return "file://" + filepath.ToSlash(absPath), nil
+}
+
+func TestMain(m *testing.M) {
+	useExternalDB := os.Getenv("TEST_USE_EXTERNAL_DB") == "1"
+	var dbURL string
+	var cleanup func()
+
+	if useExternalDB {
+		dbURL = os.Getenv("DATABASE_URL")
+		if dbURL == "" {
+			log.Fatal("DATABASE_URL is required when TEST_USE_EXTERNAL_DB=1")
+		}
+	} else {
+		postgresC, url, err := startPostgresContainer()
+		if err != nil {
+			log.Fatalf("Failed to start container: %v", err)
+		}
+		dbURL = url
+		cleanup = func() {
+			_ = postgresC.Terminate(context.Background())
+		}
+	}
+
+	if err := os.Setenv("DATABASE_URL", dbURL); err != nil {
+		log.Fatalf("Failed to set DATABASE_URL: %v", err)
+	}
 
 	db.InitDB()
 	defer db.DBPool.Close()
@@ -132,9 +175,11 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 
-	logTables(dbURL)
-
 	code := m.Run()
+
+	if cleanup != nil {
+		cleanup()
+	}
 	os.Exit(code)
 }
 
@@ -146,7 +191,7 @@ type TestCase struct {
 func TestCreateAndGetTestCase(t *testing.T) {
 	r := mux.NewRouter()
 	r.HandleFunc("/testcases", api.CreateTestCase).Methods("POST")
-	r.HandleFunc("/testcases/{id:[0-9]+}", api.GetTestCase).Methods("GET")
+	r.HandleFunc("/testcases/{id}", api.GetTestCaseHandler).Methods("GET")
 
 	server := &http.Server{
 		Addr:    ":8081",
@@ -158,7 +203,9 @@ func TestCreateAndGetTestCase(t *testing.T) {
 			log.Fatalf("Could not listen on :8081: %v\n", err)
 		}
 	}()
-	defer server.Close()
+	defer func() {
+		_ = server.Close()
+	}()
 
 	time.Sleep(2 * time.Second) // Дайте серверу время для запуска
 
@@ -181,6 +228,9 @@ func TestCreateAndGetTestCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test case: %v", err)
 	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var createdTestCase TestCase
@@ -194,6 +244,9 @@ func TestCreateAndGetTestCase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get test case: %v", err)
 	}
+	defer func() {
+		_ = getResp.Body.Close()
+	}()
 	assert.Equal(t, http.StatusOK, getResp.StatusCode)
 
 	var fetchedTestCase TestCase
@@ -205,14 +258,42 @@ func TestCreateAndGetTestCase(t *testing.T) {
 	assert.JSONEq(t, string(createdTestCase.Test), string(fetchedTestCase.Test))
 }
 
+func TestGetTestCaseContractErrors(t *testing.T) {
+	r := mux.NewRouter()
+	r.HandleFunc("/testcases/{id}", api.GetTestCaseHandler).Methods("GET")
+
+	t.Run("invalid id format", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases/not-a-number", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("missing id in path", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("non-existing id", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/testcases/99999999", nil)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
 // Test function to check if test_cases table was created
 func TestTableTestCases(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
-	db, err := sql.Open("pgx", dbURL)
+	conn, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 
 	tables := []string{
 		"test_cases",
@@ -231,7 +312,7 @@ func TestTableTestCases(t *testing.T) {
 			);
 		`
 		var exists bool
-		err := db.QueryRow(query, table).Scan(&exists)
+		err := conn.QueryRow(query, table).Scan(&exists)
 		if err != nil {
 			t.Fatalf("Failed to check if table %s exists: %v", table, err)
 		}
