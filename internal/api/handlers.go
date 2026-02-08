@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
 	"testBarn/db"
@@ -28,13 +29,19 @@ func CreateTestCase(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetTestCaseHandler(w http.ResponseWriter, r *http.Request) {
-	testCaseID := r.URL.Query().Get("id")
+	testCaseID := mux.Vars(r)["id"]
 	if testCaseID == "" {
-		http.Error(w, "Missing testCaseID", http.StatusBadRequest)
+		http.Error(w, "Missing test case ID", http.StatusBadRequest)
 		return
 	}
 
-	testCase, err := db.GetTestCaseFromDB(testCaseID)
+	id, err := strconv.ParseInt(testCaseID, 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "Invalid test case ID", http.StatusBadRequest)
+		return
+	}
+
+	testCase, err := db.GetTestCaseFromDB(id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Test case not found", http.StatusNotFound)

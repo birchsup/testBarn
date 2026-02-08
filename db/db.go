@@ -35,7 +35,7 @@ func CreateTestCaseInDB(testCase TestCase) (int64, error) {
 	return id, nil
 }
 
-func GetTestCaseFromDB(id string) (TestCase, error) {
+func GetTestCaseFromDB(id int64) (TestCase, error) {
 	var testCase TestCase
 	query := `
 		SELECT tc.id, tc.test, tsc.suite_id, ts.name
