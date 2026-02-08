@@ -1,0 +1,9 @@
+.git
+.gitignore
+.idea
+.codex
+tmp
+bin
+dist
+coverage*
+*.log
